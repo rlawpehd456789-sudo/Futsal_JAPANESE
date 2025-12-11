@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, get, remove } from 'firebase/database';
 import { database } from '../firebase';
-import { Cloud, CloudRain, Wind, AlertTriangle, Users, Clock, UserCircle, Pencil, CheckCircle2, XCircle, Target, AlertCircle, Flame } from 'lucide-react';
+import { Cloud, CloudRain, Wind, AlertTriangle, Users, Clock, UserCircle, Pencil, CheckCircle2, XCircle, Target, AlertCircle, Flame, BarChart3 } from 'lucide-react';
 import { Typewriter } from './ui/typewriter-text';
+import MessageBoard from './MessageBoard';
+import AttendanceStats from './AttendanceStats';
 
 const FutsalAttendance = () => {
 
@@ -18,17 +20,30 @@ const FutsalAttendance = () => {
 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentDateKey, setCurrentDateKey] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+    const now = new Date();
+    // 17:00 이후면 다음날 날짜 반환
+    if (now.getHours() >= 17) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow.toISOString().split('T')[0];
+    }
+    return now.toISOString().split('T')[0]; // 'YYYY-MM-DD'
   });
 
   const [inputNickname, setInputNickname] = useState('');
   const [nicknameError, setNicknameError] = useState('');
+  const [showStats, setShowStats] = useState(false);
 
-  // 오늘 날짜 키 생성 (YYYY-MM-DD 형식)
-  const getTodayKey = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+  // 표시할 날짜 키 생성 (17:00 이후면 다음날, 아니면 오늘)
+  const getDisplayDateKey = () => {
+    const now = new Date();
+    // 17:00 이후면 다음날 날짜 반환
+    if (now.getHours() >= 17) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow.toISOString().split('T')[0];
+    }
+    return now.toISOString().split('T')[0]; // 'YYYY-MM-DD'
   };
 
   // 고유 사용자 ID 가져오기 또는 생성
@@ -54,17 +69,26 @@ const FutsalAttendance = () => {
       const now = new Date();
       setCurrentTime(now);
       
+      // 표시할 날짜 계산 (17:00 이후면 다음날)
+      let newDateKey;
+      if (now.getHours() >= 17) {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        newDateKey = tomorrow.toISOString().split('T')[0];
+      } else {
+        newDateKey = now.toISOString().split('T')[0];
+      }
+      
       // 날짜가 바뀌었는지 확인
-      const newDateKey = now.toISOString().split('T')[0];
       if (newDateKey !== currentDateKey) {
         setCurrentDateKey(newDateKey);
       }
       
-      // 자정(00:00:00)에 자동 리셋
+      // 17:00:00에 자동 리셋 (다음날 참가 희망을 받기 위해)
       const hour = now.getHours();
       const minute = now.getMinutes();
       const second = now.getSeconds();
-      if (hour === 0 && minute === 0 && second === 0) {
+      if (hour === 17 && minute === 0 && second === 0) {
         resetTodayAttendance();
       }
     }, 1000);
@@ -76,16 +100,16 @@ const FutsalAttendance = () => {
 
   // 날짜가 바뀔 때마다 자동 리셋 및 Firebase 리스너 재설정
   useEffect(() => {
-    const todayKey = getTodayKey();
+    const displayDateKey = getDisplayDateKey();
     
-    // 날짜가 바뀌었을 때 자동 리셋 (자정 이후)
+    // 날짜가 바뀌었을 때 자동 리셋 (17:00 이후 다음날로 전환 시)
     const lastResetDate = localStorage.getItem('lastAutoResetDate');
-    if (lastResetDate !== todayKey) {
+    if (lastResetDate !== displayDateKey) {
       resetTodayAttendance(true); // 자동 리셋 (알림 없음)
-      localStorage.setItem('lastAutoResetDate', todayKey);
+      localStorage.setItem('lastAutoResetDate', displayDateKey);
     }
     
-    const attendanceRef = ref(database, `attendance/${todayKey}`);
+    const attendanceRef = ref(database, `attendance/${displayDateKey}`);
 
     // 실시간 리스너 연결
     const unsubscribe = onValue(attendanceRef, (snapshot) => {
@@ -270,8 +294,8 @@ const FutsalAttendance = () => {
 
     // Firebase에 저장
     try {
-      const todayKey = getTodayKey();
-      const attendanceRef = ref(database, `attendance/${todayKey}`);
+      const displayDateKey = getDisplayDateKey();
+      const attendanceRef = ref(database, `attendance/${displayDateKey}`);
       
       await set(attendanceRef, {
         participants: updatedParticipants,
@@ -285,11 +309,11 @@ const FutsalAttendance = () => {
     }
   };
 
-  // 오늘 날짜의 참가자 리스트 리셋 함수 (자동 리셋용)
+  // 표시 날짜의 참가자 리스트 리셋 함수 (자동 리셋용)
   const resetTodayAttendance = async (silent = true) => {
     try {
-      const todayKey = getTodayKey();
-      const attendanceRef = ref(database, `attendance/${todayKey}`);
+      const displayDateKey = getDisplayDateKey();
+      const attendanceRef = ref(database, `attendance/${displayDateKey}`);
       await remove(attendanceRef);
       
       // 로컬 상태도 초기화
@@ -364,6 +388,11 @@ const FutsalAttendance = () => {
     return weather.condition === 'rain' || weather.condition === 'storm';
 
   };
+
+  // 통계 페이지 표시
+  if (showStats) {
+    return <AttendanceStats onBack={() => setShowStats(false)} />;
+  }
 
   if (!isRegistered) {
 
@@ -494,7 +523,14 @@ const FutsalAttendance = () => {
 
               <p className="text-gray-900 text-xs sm:text-sm font-medium mt-1">
 
-                {currentTime.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
+                {(() => {
+                  const displayDate = new Date(currentTime);
+                  // 17:00 이후면 다음날 날짜 표시
+                  if (displayDate.getHours() >= 17) {
+                    displayDate.setDate(displayDate.getDate() + 1);
+                  }
+                  return displayDate.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+                })()}
 
                 <span className="ml-1 sm:ml-2 text-gray-900 font-semibold">12:30~12:55</span>
 
@@ -503,6 +539,15 @@ const FutsalAttendance = () => {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              {/* 통계 버튼 */}
+              <button
+                onClick={() => setShowStats(true)}
+                className="group flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 bg-white/90 hover:bg-white border border-gray-200 rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
+                title="参加統計を見る"
+              >
+                <BarChart3 size={14} className="sm:w-[16px] sm:h-[16px] md:w-[18px] md:h-[18px] text-gray-600 group-hover:text-emerald-600 transition-colors" />
+              </button>
+
               {/* 닉네임 카드 */}
               <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-gray-900 to-gray-800 rounded-lg sm:rounded-xl shadow-lg">
                 <UserCircle size={14} className="sm:w-[16px] sm:h-[16px] md:w-[18px] md:h-[18px] text-white/80" />
@@ -582,7 +627,7 @@ const FutsalAttendance = () => {
 
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
           <div className="relative z-10">
-            <div className="text-base sm:text-lg md:text-xl font-semibold mb-2 sm:mb-3">現在の参加者</div>
+            <div className="text-base sm:text-lg md:text-xl font-semibold mb-2 sm:mb-3">今日の参加者</div>
 
             <div className="text-5xl sm:text-6xl md:text-7xl font-extrabold mb-2 sm:mb-3 drop-shadow-lg">{joinCount}人</div>
 
@@ -806,22 +851,8 @@ const FutsalAttendance = () => {
 
         </div>
 
-        {/* Info Box */}
-
-        <div className="mt-6 sm:mt-7 md:mt-8 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl sm:rounded-2xl p-4 sm:p-5 md:p-6 border border-emerald-200 shadow-lg">
-
-          <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-gray-700">
-            <p className="flex items-center gap-1.5 sm:gap-2 font-semibold">
-              <span className="text-base sm:text-lg">💡</span>
-              <strong className="text-emerald-700">4人以上</strong>なら試合ができます
-            </p>
-            <p className="flex items-center gap-1.5 sm:gap-2 font-semibold">
-              <span className="text-base sm:text-lg">💡</span>
-              <strong className="text-teal-700">2-3人</strong>ならパス練習が可能です
-            </p>
-          </div>
-
-        </div>
+        {/* Message Board */}
+        <MessageBoard nickname={nickname} userId={getOrCreateUserId()} />
 
       </div>
 

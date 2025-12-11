@@ -48,3 +48,4 @@ export const Typewriter = ({ text, speed = 100, loop = true, className = '' }) =
   );
 };
 
+
