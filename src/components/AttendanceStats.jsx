@@ -194,18 +194,19 @@ const AttendanceStats = ({ onBack }) => {
               </h2>
               <div className="w-full relative" style={{ height: '400px' }} ref={chartContainerRef}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={statsData} margin={{ top: 50, right: 20, left: 0, bottom: 5 }}>
+                  <BarChart data={statsData} margin={{ top: 50, right: 20, left: 0, bottom: 80 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
                     <XAxis 
                       dataKey="nickname" 
                       angle={-45}
                       textAnchor="end"
-                      height={100}
-                      tick={{ fontSize: 12 }}
+                      height={120}
+                      tick={{ fontSize: 10 }}
+                      interval={0}
                     />
                     <YAxis 
-                      tick={{ fontSize: 12 }} 
-                      label={{ value: '参加日数', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
+                      tick={{ fontSize: 11 }} 
+                      label={{ value: '参加日数', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 11 } }}
                     />
                     <Tooltip 
                       contentStyle={{ 
