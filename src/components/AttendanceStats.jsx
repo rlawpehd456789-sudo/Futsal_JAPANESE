@@ -33,18 +33,46 @@ const AttendanceStats = ({ onBack }) => {
         if (!container) return;
 
         // recharts가 렌더링한 첫 번째 바 요소 찾기 (금색 바)
-        const firstBar = container.querySelector('rect[fill="#fbbf24"]');
+        // 여러 방법으로 시도: fill 속성, 첫 번째 rect 요소 등
+        let firstBar = container.querySelector('rect[fill="#fbbf24"]');
+        
+        // 금색 바를 찾지 못한 경우, 모든 rect 요소 중 첫 번째를 찾기
+        if (!firstBar) {
+          const allBars = container.querySelectorAll('rect[class*="recharts-bar-rectangle"], rect[fill="#10b981"]');
+          // 첫 번째 바는 금색이어야 하는데, 아직 렌더링되지 않았을 수 있으므로
+          // 첫 번째 rect 요소를 찾기
+          const rects = container.querySelectorAll('rect');
+          // recharts의 바는 일반적으로 특정 클래스를 가지거나 특정 구조를 가짐
+          for (let i = 0; i < rects.length; i++) {
+            const rect = rects[i];
+            const fill = rect.getAttribute('fill');
+            // 금색 바이거나, 첫 번째 바일 가능성이 높은 요소 찾기
+            if (fill === '#fbbf24' || (i === 0 && fill && fill !== 'none')) {
+              firstBar = rect;
+              break;
+            }
+          }
+        }
+        
         if (firstBar) {
           const barRect = firstBar.getBoundingClientRect();
           const containerRect = container.getBoundingClientRect();
           
-          // 첫 번째 바의 중앙 위치 계산
+          // 첫 번째 바의 중앙 위치 계산 (컨테이너 기준)
           const barCenterX = barRect.left + barRect.width / 2 - containerRect.left;
           const leftPercent = (barCenterX / containerRect.width) * 100;
           
+          // 바의 상단 위치 계산 (그래프바의 정중앙 상단에 위치하도록)
+          const barTop = barRect.top - containerRect.top;
+          // 트로피 아이콘 크기를 고려하여 바 상단에서 약간 위에 배치
+          // 스마트폰에서는 작은 아이콘(32px), 데스크톱에서는 큰 아이콘(40px)
+          const isMobile = window.innerWidth < 640;
+          const trophySize = isMobile ? 32 : 40;
+          const topPosition = Math.max(barTop - trophySize - 10, 5);
+          
           setTrophyPosition({
             left: `${leftPercent}%`,
-            top: '10px'
+            top: `${topPosition}px`
           });
         } else {
           // 바가 아직 렌더링되지 않은 경우, 약간의 지연 후 다시 시도
@@ -52,8 +80,8 @@ const AttendanceStats = ({ onBack }) => {
         }
       };
 
-      // 차트가 렌더링된 후 위치 계산
-      setTimeout(calculateTrophyPosition, 300);
+      // 차트가 렌더링된 후 위치 계산 (스마트폰에서도 정확하게 계산되도록 지연 시간 증가)
+      setTimeout(calculateTrophyPosition, 500);
       
       // 윈도우 리사이즈 시 위치 재계산
       window.addEventListener('resize', calculateTrophyPosition);
@@ -221,17 +249,18 @@ const AttendanceStats = ({ onBack }) => {
                   
                   return (
                     <div 
-                      className="absolute flex justify-center"
+                      className="absolute flex justify-center z-10"
                       style={{ 
                         top: trophyPosition.top,
                         left: trophyPosition.left,
-                        transform: 'translateX(-50%)'
+                        transform: 'translateX(-50%)',
+                        pointerEvents: 'none'
                       }}
                     >
                       <div className="animate-bounce">
                         <Trophy 
                           size={40} 
-                          className="text-yellow-500" 
+                          className="text-yellow-500 sm:w-[40px] sm:h-[40px] w-[32px] h-[32px]" 
                           fill="#fbbf24"
                           style={{ 
                             filter: 'drop-shadow(0 4px 8px rgba(251, 191, 36, 0.4))',
