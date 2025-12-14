@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ref, onValue, set, get, remove } from 'firebase/database';
 import { database } from '../firebase';
-import { Cloud, CloudRain, Wind, AlertTriangle, Users, Clock, UserCircle, Pencil, CheckCircle2, XCircle, Target, AlertCircle, Flame, BarChart3 } from 'lucide-react';
+import { Cloud, CloudRain, Wind, AlertTriangle, Users, Clock, UserCircle, Pencil, CheckCircle2, XCircle, Target, AlertCircle, Flame, BarChart3, Pin, PinOff, Edit2 } from 'lucide-react';
 import { Typewriter } from './ui/typewriter-text';
 import MessageBoard from './MessageBoard';
 import AttendanceStats from './AttendanceStats';
@@ -33,6 +33,9 @@ const FutsalAttendance = () => {
   const [inputNickname, setInputNickname] = useState('');
   const [nicknameError, setNicknameError] = useState('');
   const [showStats, setShowStats] = useState(false);
+  const [announcements, setAnnouncements] = useState([]);
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
+  const [editAnnouncementText, setEditAnnouncementText] = useState('');
 
   // 표시할 날짜 키 생성 (17:00 이후면 다음날, 아니면 오늘)
   const getDisplayDateKey = () => {
@@ -143,6 +146,34 @@ const FutsalAttendance = () => {
       unsubscribe(); // Firebase 리스너 제거
     };
   }, [currentDateKey]);
+
+  // 공지사항 로드
+  useEffect(() => {
+    const announcementsRef = ref(database, 'announcements');
+    
+    const unsubscribe = onValue(announcementsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const announcementsArray = Object.keys(data)
+          .map(key => ({
+            id: key,
+            ...data[key]
+          }))
+          .sort((a, b) => new Date(b.pinnedAt || b.createdAt) - new Date(a.pinnedAt || a.createdAt))
+          .slice(0, 5); // 최대 5개만
+        
+        setAnnouncements(announcementsArray);
+      } else {
+        setAnnouncements([]);
+      }
+    }, (error) => {
+      console.error('お知らせ読み込みエラー:', error);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
 
   const handleRegister = async () => {
@@ -310,11 +341,23 @@ const FutsalAttendance = () => {
   };
 
   // 표시 날짜의 참가자 리스트 리셋 함수 (자동 리셋용)
+  // 참고: 통계 데이터는 유지하기 위해 participants만 초기화 (전체 데이터 삭제하지 않음)
   const resetTodayAttendance = async (silent = true) => {
     try {
       const displayDateKey = getDisplayDateKey();
       const attendanceRef = ref(database, `attendance/${displayDateKey}`);
-      await remove(attendanceRef);
+      
+      // 기존 데이터 가져오기
+      const snapshot = await get(attendanceRef);
+      const existingData = snapshot.exists() ? snapshot.val() : {};
+      
+      // participants만 빈 배열로 초기화하고 나머지 데이터는 유지
+      await set(attendanceRef, {
+        ...existingData,
+        participants: [],
+        date: new Date().toDateString(),
+        lastUpdated: new Date().toISOString()
+      });
       
       // 로컬 상태도 초기화
       setParticipants([]);
@@ -620,6 +663,122 @@ const FutsalAttendance = () => {
       {/* Main Content */}
 
       <div className="max-w-2xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8">
+
+        {/* Announcements */}
+        {announcements.length > 0 && (
+          <div className="mb-4 sm:mb-6 space-y-2 sm:space-y-3">
+            {announcements.map((announcement) => {
+              const isMyAnnouncement = announcement.authorId === getOrCreateUserId();
+              const isEditing = editingAnnouncementId === announcement.id;
+              
+              return (
+                <div
+                  key={announcement.id}
+                  className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-lg"
+                >
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <div className="p-1.5 sm:p-2 bg-amber-200 rounded-lg flex-shrink-0">
+                      <Pin size={14} className="sm:w-[16px] sm:h-[16px] text-amber-700" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2 flex-wrap">
+                        <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] sm:text-xs font-bold rounded-full">
+                          お知らせ
+                        </span>
+                        <span className="font-semibold text-xs sm:text-sm text-gray-800">
+                          {announcement.author}
+                        </span>
+                        {isMyAnnouncement && (
+                          <span className="px-1.5 sm:px-2 py-0.5 bg-emerald-500 text-white text-[10px] sm:text-xs font-bold rounded-full">
+                            私
+                          </span>
+                        )}
+                        {isMyAnnouncement && !isEditing && (
+                          <div className="flex items-center gap-1 ml-auto">
+                            <button
+                              onClick={async () => {
+                                if (!confirm('お知らせを解除しますか？')) {
+                                  return;
+                                }
+                                try {
+                                  await remove(ref(database, `announcements/${announcement.id}`));
+                                } catch (error) {
+                                  console.error('お知らせ解除エラー:', error);
+                                  alert('お知らせの解除に失敗しました。');
+                                }
+                              }}
+                              className="p-1 sm:p-1.5 text-amber-600 hover:bg-amber-100 rounded-lg transition-all"
+                              title="お知らせ解除"
+                            >
+                              <PinOff size={12} className="sm:w-[14px] sm:h-[14px]" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingAnnouncementId(announcement.id);
+                                setEditAnnouncementText(announcement.text);
+                              }}
+                              className="p-1 sm:p-1.5 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-all"
+                              title="編集"
+                            >
+                              <Edit2 size={12} className="sm:w-[14px] sm:h-[14px]" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={editAnnouncementText}
+                            onChange={(e) => setEditAnnouncementText(e.target.value)}
+                            className="w-full px-3 py-2 border-2 border-emerald-300 rounded-lg text-sm sm:text-base focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 resize-none"
+                            rows={3}
+                            maxLength={200}
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={async () => {
+                                const trimmedText = editAnnouncementText.trim();
+                                if (!trimmedText) {
+                                  alert('メッセージを入力してください。');
+                                  return;
+                                }
+                                try {
+                                  await set(ref(database, `announcements/${announcement.id}/text`), trimmedText);
+                                  await set(ref(database, `messages/${announcement.messageId}/text`), trimmedText);
+                                  setEditingAnnouncementId(null);
+                                  setEditAnnouncementText('');
+                                } catch (error) {
+                                  console.error('お知らせ編集エラー:', error);
+                                  alert('お知らせの編集に失敗しました。');
+                                }
+                              }}
+                              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-emerald-500 text-white text-[10px] sm:text-xs font-semibold rounded-lg hover:bg-emerald-600 transition-all"
+                            >
+                              保存
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingAnnouncementId(null);
+                                setEditAnnouncementText('');
+                              }}
+                              className="px-2 sm:px-3 py-1 sm:py-1.5 bg-gray-400 text-white text-[10px] sm:text-xs font-semibold rounded-lg hover:bg-gray-500 transition-all"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm sm:text-base text-gray-700 whitespace-pre-wrap break-words">
+                          {announcement.text}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Attendance Count */}
 
