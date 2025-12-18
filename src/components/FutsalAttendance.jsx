@@ -414,7 +414,6 @@ const FutsalAttendance = () => {
       setMyStatus('none');
       
       // 로컬 스토리지의 상태도 초기화
-      const displayDateKey = getDisplayDateKey();
       localStorage.setItem(`futsalStatus_${displayDateKey}`, 'none');
       
       if (!silent) {
