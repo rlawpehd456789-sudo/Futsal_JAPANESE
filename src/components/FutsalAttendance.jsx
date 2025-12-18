@@ -113,22 +113,34 @@ const FutsalAttendance = () => {
     }
     
     const attendanceRef = ref(database, `attendance/${displayDateKey}`);
+    const currentNickname = nickname || localStorage.getItem('futsalNickname');
+
+    // 로컬 스토리지에서 저장된 상태 복원 (빠른 UI 업데이트를 위해)
+    if (currentNickname) {
+      const savedStatus = localStorage.getItem(`futsalStatus_${displayDateKey}`);
+      if (savedStatus && ['join', 'pass', 'none'].includes(savedStatus)) {
+        setMyStatus(savedStatus);
+      }
+    }
 
     // 실시간 리스너 연결
     const unsubscribe = onValue(attendanceRef, (snapshot) => {
       const data = snapshot.val();
-      const currentNickname = localStorage.getItem('futsalNickname'); // 현재 닉네임 가져오기
       
       if (data && data.participants) {
-        setParticipants(data.participants || []);
+        const participantsList = data.participants || [];
+        setParticipants(participantsList);
         
-        // 내 상태 업데이트
+        // 내 상태 업데이트 (nickname state와 localStorage 모두 확인)
         if (currentNickname) {
-          const myData = data.participants.find(p => p.nickname === currentNickname);
+          const myData = participantsList.find(p => p.nickname === currentNickname);
           if (myData) {
             setMyStatus(myData.status);
+            // 로컬 스토리지에도 저장
+            localStorage.setItem(`futsalStatus_${displayDateKey}`, myData.status);
           } else {
             setMyStatus('none');
+            localStorage.setItem(`futsalStatus_${displayDateKey}`, 'none');
           }
         }
       } else {
@@ -136,6 +148,7 @@ const FutsalAttendance = () => {
         setParticipants([]);
         if (currentNickname) {
           setMyStatus('none');
+          localStorage.setItem(`futsalStatus_${displayDateKey}`, 'none');
         }
       }
     }, (error) => {
@@ -145,7 +158,7 @@ const FutsalAttendance = () => {
     return () => {
       unsubscribe(); // Firebase 리스너 제거
     };
-  }, [currentDateKey]);
+  }, [currentDateKey, nickname]);
 
   // 공지사항 로드
   useEffect(() => {
@@ -195,48 +208,68 @@ const FutsalAttendance = () => {
 
     try {
       const userId = getOrCreateUserId();
+      const displayDateKey = getDisplayDateKey();
       
-      // Firebase에서 모든 날짜의 참가자 목록 가져오기
-      const attendanceRef = ref(database, 'attendance');
-      const snapshot = await get(attendanceRef);
+      // 사용자 매핑 확인
+      const userMappingRef = ref(database, `userMappings/${userId}`);
+      const userMappingSnapshot = await get(userMappingRef);
       
-      const allNicknames = new Set();
       let previousNickname = null;
       let previousStatus = null;
       let previousTime = null;
       
-      if (snapshot.exists()) {
-        const attendanceData = snapshot.val();
-        
-        // 사용자 매핑 확인
-        const userMappingRef = ref(database, `userMappings/${userId}`);
-        const userMappingSnapshot = await get(userMappingRef);
-        
-        if (userMappingSnapshot.exists()) {
-          previousNickname = userMappingSnapshot.val().nickname;
+      if (userMappingSnapshot.exists()) {
+        previousNickname = userMappingSnapshot.val().nickname;
+      }
+      
+      // 현재 날짜의 참가자 목록만 가져오기 (전날 데이터는 제외)
+      const currentDateAttendanceRef = ref(database, `attendance/${displayDateKey}`);
+      const currentDateSnapshot = await get(currentDateAttendanceRef);
+      
+      const currentDateNicknames = new Set();
+      
+      if (currentDateSnapshot.exists()) {
+        const currentDateData = currentDateSnapshot.val();
+        if (currentDateData && currentDateData.participants && Array.isArray(currentDateData.participants)) {
+          currentDateData.participants.forEach(participant => {
+            if (participant.nickname) {
+              currentDateNicknames.add(participant.nickname.toLowerCase());
+              
+              // 이전 닉네임으로 투표한 기록이 있으면 저장
+              if (previousNickname && participant.nickname === previousNickname) {
+                previousStatus = participant.status;
+                previousTime = participant.time;
+              }
+            }
+          });
         }
+      }
+      
+      // 이전 닉네임의 과거 기록 찾기 (모든 날짜에서)
+      if (previousNickname && previousNickname !== trimmedNickname) {
+        const allAttendanceRef = ref(database, 'attendance');
+        const allAttendanceSnapshot = await get(allAttendanceRef);
         
-        // 모든 날짜의 참가자 목록을 순회하며 닉네임 수집 및 이전 닉네임 찾기
-        Object.keys(attendanceData).forEach(dateKey => {
-          const dateData = attendanceData[dateKey];
-          if (dateData && dateData.participants && Array.isArray(dateData.participants)) {
-            dateData.participants.forEach(participant => {
-              if (participant.nickname) {
-                allNicknames.add(participant.nickname.toLowerCase());
-                
-                // 이전 닉네임으로 투표한 기록이 있으면 저장
+        if (allAttendanceSnapshot.exists()) {
+          const attendanceData = allAttendanceSnapshot.val();
+          
+          // 모든 날짜에서 이전 닉네임의 마지막 상태 찾기
+          Object.keys(attendanceData).forEach(dateKey => {
+            const dateData = attendanceData[dateKey];
+            if (dateData && dateData.participants && Array.isArray(dateData.participants)) {
+              dateData.participants.forEach(participant => {
                 if (previousNickname && participant.nickname === previousNickname) {
                   previousStatus = participant.status;
                   previousTime = participant.time;
                 }
-              }
-            });
-          }
-        });
+              });
+            }
+          });
+        }
       }
 
-      // 닉네임 중복 체크 (대소문자 구분 없이, 단 같은 사용자가 이전에 사용한 닉네임이 아니어야 함)
-      if (allNicknames.has(trimmedNickname.toLowerCase()) && trimmedNickname.toLowerCase() !== previousNickname?.toLowerCase()) {
+      // 닉네임 중복 체크 (현재 날짜의 참가자 목록만 확인, 대소문자 구분 없이, 단 같은 사용자가 이전에 사용한 닉네임이 아니어야 함)
+      if (currentDateNicknames.has(trimmedNickname.toLowerCase()) && trimmedNickname.toLowerCase() !== previousNickname?.toLowerCase()) {
         setNicknameError('既に使用中のニックネームです。別のニックネームを入力してください。');
         return;
       }
@@ -276,8 +309,7 @@ const FutsalAttendance = () => {
         }
       }
 
-      // 사용자 매핑 업데이트
-      const userMappingRef = ref(database, `userMappings/${userId}`);
+      // 사용자 매핑 업데이트 (위에서 이미 선언된 userMappingRef 재사용)
       await set(userMappingRef, {
         nickname: trimmedNickname,
         updatedAt: new Date().toISOString()
@@ -306,28 +338,46 @@ const FutsalAttendance = () => {
   const updateStatus = async (status) => {
     const now = new Date();
     const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const currentNickname = nickname || localStorage.getItem('futsalNickname');
 
-    // 기존 참가자 목록에서 내 정보 제거
-    let updatedParticipants = participants.filter(p => p.nickname !== nickname);
-
-    // 새 상태 추가 (none이 아니면)
-    if (status !== 'none') {
-      updatedParticipants.push({
-        nickname,
-        status,
-        time: timeStr
-      });
+    if (!currentNickname) {
+      console.error('ニックネームが設定されていません');
+      return;
     }
 
-    // 로컬 상태 업데이트
-    setParticipants(updatedParticipants);
-    setMyStatus(status);
-
-    // Firebase에 저장
     try {
       const displayDateKey = getDisplayDateKey();
       const attendanceRef = ref(database, `attendance/${displayDateKey}`);
       
+      // Firebase에서 최신 데이터 가져오기
+      const snapshot = await get(attendanceRef);
+      let currentParticipants = [];
+      
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        currentParticipants = data.participants || [];
+      }
+
+      // 기존 참가자 목록에서 내 정보 제거
+      let updatedParticipants = currentParticipants.filter(p => p.nickname !== currentNickname);
+
+      // 새 상태 추가 (none이 아니면)
+      if (status !== 'none') {
+        updatedParticipants.push({
+          nickname: currentNickname,
+          status,
+          time: timeStr
+        });
+      }
+
+      // 로컬 상태 업데이트
+      setParticipants(updatedParticipants);
+      setMyStatus(status);
+      
+      // 로컬 스토리지에 상태 저장 (날짜별로)
+      localStorage.setItem(`futsalStatus_${displayDateKey}`, status);
+
+      // Firebase에 저장
       await set(attendanceRef, {
         participants: updatedParticipants,
         date: new Date().toDateString(),
@@ -362,6 +412,10 @@ const FutsalAttendance = () => {
       // 로컬 상태도 초기화
       setParticipants([]);
       setMyStatus('none');
+      
+      // 로컬 스토리지의 상태도 초기화
+      const displayDateKey = getDisplayDateKey();
+      localStorage.setItem(`futsalStatus_${displayDateKey}`, 'none');
       
       if (!silent) {
         alert('参加者リストがリセットされました。');
