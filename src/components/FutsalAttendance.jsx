@@ -36,6 +36,7 @@ const FutsalAttendance = () => {
   const [isLoginMode, setIsLoginMode] = useState(true); // true: 로그인, false: 회원가입
   const [inputPassword, setInputPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [saveUsername, setSaveUsername] = useState(false); // 아이디 저장 체크박스 상태
   const [announcements, setAnnouncements] = useState([]);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
   const [editAnnouncementText, setEditAnnouncementText] = useState('');
@@ -68,6 +69,14 @@ const FutsalAttendance = () => {
     if (storedUsername) {
       setNickname(storedUsername);
       setIsRegistered(true);
+    }
+
+    // 저장된 아이디 불러오기 (로그인 화면용)
+    const savedUsername = localStorage.getItem('savedUsername');
+    const shouldSaveUsername = localStorage.getItem('saveUsername') === 'true';
+    if (savedUsername && shouldSaveUsername) {
+      setInputNickname(savedUsername);
+      setSaveUsername(true);
     }
 
     // 실시간 시간 업데이트 (1초마다)
@@ -255,6 +264,16 @@ const FutsalAttendance = () => {
       localStorage.setItem('futsalUsername', trimmedUsername);
       setNickname(trimmedUsername);
       setIsRegistered(true);
+      
+      // 회원가입 시에도 아이디 저장 체크박스가 체크되어 있으면 아이디 저장
+      if (saveUsername) {
+        localStorage.setItem('savedUsername', trimmedUsername);
+        localStorage.setItem('saveUsername', 'true');
+      } else {
+        localStorage.removeItem('savedUsername');
+        localStorage.setItem('saveUsername', 'false');
+      }
+      
       setInputNickname('');
       setInputPassword('');
       setNicknameError('');
@@ -310,6 +329,16 @@ const FutsalAttendance = () => {
       localStorage.setItem('futsalUsername', trimmedUsername);
       setNickname(trimmedUsername);
       setIsRegistered(true);
+      
+      // 아이디 저장 체크박스가 체크되어 있으면 아이디 저장
+      if (saveUsername) {
+        localStorage.setItem('savedUsername', trimmedUsername);
+        localStorage.setItem('saveUsername', 'true');
+      } else {
+        localStorage.removeItem('savedUsername');
+        localStorage.setItem('saveUsername', 'false');
+      }
+      
       setInputNickname('');
       setInputPassword('');
       setNicknameError('');
@@ -569,6 +598,23 @@ const FutsalAttendance = () => {
               </div>
             )}
 
+            {/* 아이디 저장 체크박스 */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="saveUsername"
+                checked={saveUsername}
+                onChange={(e) => setSaveUsername(e.target.checked)}
+                className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer"
+              />
+              <label
+                htmlFor="saveUsername"
+                className="text-sm sm:text-base text-gray-700 font-medium cursor-pointer select-none"
+              >
+                ユーザーIDを保存
+              </label>
+            </div>
+
             <button
               onClick={isLoginMode ? handleLogin : handleSignup}
               className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-base sm:text-lg hover:from-emerald-600 hover:to-teal-600 transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
@@ -583,7 +629,20 @@ const FutsalAttendance = () => {
                   setIsLoginMode(!isLoginMode);
                   setNicknameError('');
                   setPasswordError('');
-                  setInputNickname('');
+                  // 로그인 모드로 전환 시 저장된 아이디 복원
+                  if (!isLoginMode) {
+                    const savedUsername = localStorage.getItem('savedUsername');
+                    const shouldSaveUsername = localStorage.getItem('saveUsername') === 'true';
+                    if (savedUsername && shouldSaveUsername) {
+                      setInputNickname(savedUsername);
+                      setSaveUsername(true);
+                    } else {
+                      setInputNickname('');
+                      setSaveUsername(false);
+                    }
+                  } else {
+                    setInputNickname('');
+                  }
                   setInputPassword('');
                 }}
                 className="text-emerald-600 hover:text-emerald-700 text-sm font-medium underline"
