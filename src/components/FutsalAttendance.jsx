@@ -33,6 +33,9 @@ const FutsalAttendance = () => {
   const [inputNickname, setInputNickname] = useState('');
   const [nicknameError, setNicknameError] = useState('');
   const [showStats, setShowStats] = useState(false);
+  const [isLoginMode, setIsLoginMode] = useState(true); // true: 로그인, false: 회원가입
+  const [inputPassword, setInputPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [announcements, setAnnouncements] = useState([]);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState(null);
   const [editAnnouncementText, setEditAnnouncementText] = useState('');
@@ -60,10 +63,10 @@ const FutsalAttendance = () => {
   };
 
   useEffect(() => {
-    // 닉네임 확인
-    const storedNickname = localStorage.getItem('futsalNickname');
-    if (storedNickname) {
-      setNickname(storedNickname);
+    // 아이디 확인
+    const storedUsername = localStorage.getItem('futsalUsername');
+    if (storedUsername) {
+      setNickname(storedUsername);
       setIsRegistered(true);
     }
 
@@ -113,7 +116,7 @@ const FutsalAttendance = () => {
     }
     
     const attendanceRef = ref(database, `attendance/${displayDateKey}`);
-    const currentNickname = nickname || localStorage.getItem('futsalNickname');
+    const currentNickname = nickname || localStorage.getItem('futsalUsername');
 
     // 로컬 스토리지에서 저장된 상태 복원 (빠른 UI 업데이트를 위해)
     if (currentNickname) {
@@ -188,157 +191,140 @@ const FutsalAttendance = () => {
     };
   }, []);
 
+  // 비밀번호 해시 함수 (SHA-256)
+  const hashPassword = async (password) => {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
 
-  const handleRegister = async () => {
-    const trimmedNickname = inputNickname.trim();
+  // 회원가입 처리
+  const handleSignup = async () => {
+    const trimmedUsername = inputNickname.trim();
+    const trimmedPassword = inputPassword.trim();
     
-    if (!trimmedNickname) {
-      setNicknameError('ニックネームを入力してください。');
+    // 입력 검증
+    if (!trimmedUsername) {
+      setNicknameError('ユーザーIDを入力してください。');
+      return;
+    }
+    
+    if (!trimmedPassword) {
+      setPasswordError('パスワードを入力してください。');
       return;
     }
 
-    // 닉네임 길이 검증 (10글자 제한)
-    if (trimmedNickname.length > 10) {
-      setNicknameError('ニックネームは最大10文字まで入力可能です。');
+    // 아이디 길이 검증 (10글자 제한)
+    if (trimmedUsername.length > 10) {
+      setNicknameError('ユーザーIDは最大10文字まで入力可能です。');
+      return;
+    }
+
+    if (trimmedPassword.length < 4) {
+      setPasswordError('パスワードは4文字以上入力してください。');
       return;
     }
 
     // 에러 메시지 초기화
     setNicknameError('');
+    setPasswordError('');
 
     try {
-      const userId = getOrCreateUserId();
-      const displayDateKey = getDisplayDateKey();
+      // 아이디 중복 체크
+      const userRef = ref(database, `users/${trimmedUsername}`);
+      const userSnapshot = await get(userRef);
       
-      // 사용자 매핑 확인
-      const userMappingRef = ref(database, `userMappings/${userId}`);
-      const userMappingSnapshot = await get(userMappingRef);
-      
-      let previousNickname = null;
-      let previousStatus = null;
-      let previousTime = null;
-      
-      if (userMappingSnapshot.exists()) {
-        previousNickname = userMappingSnapshot.val().nickname;
-      }
-      
-      // 현재 날짜의 참가자 목록만 가져오기 (전날 데이터는 제외)
-      const currentDateAttendanceRef = ref(database, `attendance/${displayDateKey}`);
-      const currentDateSnapshot = await get(currentDateAttendanceRef);
-      
-      const currentDateNicknames = new Set();
-      
-      if (currentDateSnapshot.exists()) {
-        const currentDateData = currentDateSnapshot.val();
-        if (currentDateData && currentDateData.participants && Array.isArray(currentDateData.participants)) {
-          currentDateData.participants.forEach(participant => {
-            if (participant.nickname) {
-              currentDateNicknames.add(participant.nickname.toLowerCase());
-              
-              // 이전 닉네임으로 투표한 기록이 있으면 저장
-              if (previousNickname && participant.nickname === previousNickname) {
-                previousStatus = participant.status;
-                previousTime = participant.time;
-              }
-            }
-          });
-        }
-      }
-      
-      // 이전 닉네임의 과거 기록 찾기 (모든 날짜에서)
-      if (previousNickname && previousNickname !== trimmedNickname) {
-        const allAttendanceRef = ref(database, 'attendance');
-        const allAttendanceSnapshot = await get(allAttendanceRef);
-        
-        if (allAttendanceSnapshot.exists()) {
-          const attendanceData = allAttendanceSnapshot.val();
-          
-          // 모든 날짜에서 이전 닉네임의 마지막 상태 찾기
-          Object.keys(attendanceData).forEach(dateKey => {
-            const dateData = attendanceData[dateKey];
-            if (dateData && dateData.participants && Array.isArray(dateData.participants)) {
-              dateData.participants.forEach(participant => {
-                if (previousNickname && participant.nickname === previousNickname) {
-                  previousStatus = participant.status;
-                  previousTime = participant.time;
-                }
-              });
-            }
-          });
-        }
-      }
-
-      // 닉네임 중복 체크 (현재 날짜의 참가자 목록만 확인, 대소문자 구분 없이, 단 같은 사용자가 이전에 사용한 닉네임이 아니어야 함)
-      if (currentDateNicknames.has(trimmedNickname.toLowerCase()) && trimmedNickname.toLowerCase() !== previousNickname?.toLowerCase()) {
-        setNicknameError('既に使用中のニックネームです。別のニックネームを入力してください。');
+      if (userSnapshot.exists()) {
+        setNicknameError('既に使用中のユーザーIDです。別のIDを入力してください。');
         return;
       }
 
-      // 이전 닉네임으로 투표한 기록이 있으면 모든 날짜에서 제거
-      if (previousNickname && previousNickname !== trimmedNickname) {
-        const attendanceRef = ref(database, 'attendance');
-        const allAttendanceSnapshot = await get(attendanceRef);
-        
-        if (allAttendanceSnapshot.exists()) {
-          const attendanceData = allAttendanceSnapshot.val();
-          const updates = {};
-          
-          // 모든 날짜에서 이전 닉네임 제거
-          Object.keys(attendanceData).forEach(dateKey => {
-            const dateData = attendanceData[dateKey];
-            if (dateData && dateData.participants && Array.isArray(dateData.participants)) {
-              const filteredParticipants = dateData.participants.filter(
-                p => p.nickname !== previousNickname
-              );
-              
-              if (filteredParticipants.length !== dateData.participants.length) {
-                updates[`attendance/${dateKey}/participants`] = filteredParticipants;
-              }
-            }
-          });
-          
-          // 여러 날짜 동시 업데이트
-          if (Object.keys(updates).length > 0) {
-            await Promise.all(
-              Object.entries(updates).map(([path, value]) => {
-                const pathRef = ref(database, path);
-                return set(pathRef, value);
-              })
-            );
-          }
-        }
-      }
+      // 비밀번호 해시
+      const passwordHash = await hashPassword(trimmedPassword);
 
-      // 사용자 매핑 업데이트 (위에서 이미 선언된 userMappingRef 재사용)
-      await set(userMappingRef, {
-        nickname: trimmedNickname,
-        updatedAt: new Date().toISOString()
+      // 사용자 정보 저장
+      await set(userRef, {
+        username: trimmedUsername,
+        passwordHash: passwordHash,
+        createdAt: new Date().toISOString()
       });
 
-      // 중복이 없으면 등록 진행
-      localStorage.setItem('futsalNickname', trimmedNickname);
-      setNickname(trimmedNickname);
+      // 로그인 상태로 설정
+      localStorage.setItem('futsalUsername', trimmedUsername);
+      setNickname(trimmedUsername);
       setIsRegistered(true);
+      setInputNickname('');
+      setInputPassword('');
       setNicknameError('');
-
-      // 이전 상태가 있었고 닉네임이 바뀌었다면 새 닉네임으로 상태 복원
-      if (previousNickname && previousNickname !== trimmedNickname && previousStatus) {
-        // 약간의 지연 후 상태 업데이트 (Firebase 업데이트 완료 대기)
-        setTimeout(() => {
-          updateStatus(previousStatus);
-        }, 500);
-      }
+      setPasswordError('');
 
     } catch (error) {
-      console.error('ニックネーム登録失敗:', error);
-      setNicknameError('ニックネーム確認中にエラーが発生しました。再度お試しください。');
+      console.error('회원가입 실패:', error);
+      setNicknameError('회원가입 중 에러가 발생했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  // 로그인 처리
+  const handleLogin = async () => {
+    const trimmedUsername = inputNickname.trim();
+    const trimmedPassword = inputPassword.trim();
+    
+    // 입력 검증
+    if (!trimmedUsername) {
+      setNicknameError('ユーザーIDを入力してください。');
+      return;
+    }
+    
+    if (!trimmedPassword) {
+      setPasswordError('パスワードを入力してください。');
+      return;
+    }
+
+    // 에러 메시지 초기화
+    setNicknameError('');
+    setPasswordError('');
+
+    try {
+      // 사용자 정보 가져오기
+      const userRef = ref(database, `users/${trimmedUsername}`);
+      const userSnapshot = await get(userRef);
+      
+      if (!userSnapshot.exists()) {
+        setNicknameError('ユーザーIDまたはパスワードが正しくありません。');
+        return;
+      }
+
+      const userData = userSnapshot.val();
+      
+      // 비밀번호 검증
+      const passwordHash = await hashPassword(trimmedPassword);
+      
+      if (userData.passwordHash !== passwordHash) {
+        setPasswordError('ユーザーIDまたはパスワードが正しくありません。');
+        return;
+      }
+
+      // 로그인 성공
+      localStorage.setItem('futsalUsername', trimmedUsername);
+      setNickname(trimmedUsername);
+      setIsRegistered(true);
+      setInputNickname('');
+      setInputPassword('');
+      setNicknameError('');
+      setPasswordError('');
+
+    } catch (error) {
+      console.error('로그인 실패:', error);
+      setNicknameError('ログイン中にエラーが発生しました。再度お試しください。');
     }
   };
 
   const updateStatus = async (status) => {
     const now = new Date();
     const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const currentNickname = nickname || localStorage.getItem('futsalNickname');
+    const currentNickname = nickname || localStorage.getItem('futsalUsername');
 
     if (!currentNickname) {
       console.error('ニックネームが設定されていません');
@@ -513,42 +499,63 @@ const FutsalAttendance = () => {
               />
             </h1>
 
-            <p className="text-gray-600 text-sm sm:text-base font-medium">ニックネームを入力してください</p>
+            <p className="text-gray-600 text-sm sm:text-base font-medium">
+              {isLoginMode ? 'ログインしてください' : '新規登録してください'}
+            </p>
 
           </div>
 
           
 
-          <div className="space-y-2 sm:space-y-3">
+          <div className="space-y-3 sm:space-y-4">
 
-            <input
+            <div>
+              <input
+                type="text"
+                value={inputNickname}
+                onChange={(e) => {
+                  setInputNickname(e.target.value);
+                  setNicknameError('');
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && inputPassword.trim()) {
+                    isLoginMode ? handleLogin() : handleSignup();
+                  }
+                }}
+                placeholder="ユーザーID (最大10文字)"
+                className={`w-full px-4 py-3 sm:px-5 sm:py-4 border-2 rounded-xl sm:rounded-2xl text-sm sm:text-base font-medium focus:outline-none transition-all duration-200 ${
+                  nicknameError 
+                    ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
+                    : 'border-gray-200 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100'
+                }`}
+                maxLength={10}
+              />
+              <p className="text-gray-400 text-xs font-medium px-2 mt-1">
+                ユーザーIDは最大10文字まで入力可能です。
+              </p>
+            </div>
 
-              type="text"
-
-              value={inputNickname}
-
-              onChange={(e) => {
-                setInputNickname(e.target.value);
-                setNicknameError(''); // 입력 시 에러 메시지 초기화
-              }}
-
-              onKeyPress={(e) => e.key === 'Enter' && handleRegister()}
-
-              placeholder="例: サッカー王, タロウ"
-
-              className={`w-full px-4 py-3 sm:px-5 sm:py-4 border-2 rounded-xl sm:rounded-2xl text-sm sm:text-base font-medium focus:outline-none transition-all duration-200 ${
-                nicknameError 
-                  ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
-                  : 'border-gray-200 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100'
-              }`}
-
-              maxLength={10}
-
-            />
-
-            <p className="text-gray-400 text-xs font-medium px-2">
-              ニックネームは最大10文字まで入力可能です。
-            </p>
+            <div>
+              <input
+                type="password"
+                value={inputPassword}
+                onChange={(e) => {
+                  setInputPassword(e.target.value);
+                  setPasswordError('');
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && inputNickname.trim()) {
+                    isLoginMode ? handleLogin() : handleSignup();
+                  }
+                }}
+                placeholder="パスワード (4文字以上)"
+                className={`w-full px-4 py-3 sm:px-5 sm:py-4 border-2 rounded-xl sm:rounded-2xl text-sm sm:text-base font-medium focus:outline-none transition-all duration-200 ${
+                  passwordError 
+                    ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
+                    : 'border-gray-200 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100'
+                }`}
+              />
+            </div>
 
             {nicknameError && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-2 sm:p-3">
@@ -556,19 +563,34 @@ const FutsalAttendance = () => {
               </div>
             )}
 
+            {passwordError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-2 sm:p-3">
+                <p className="text-red-600 text-xs sm:text-sm font-medium">{passwordError}</p>
+              </div>
+            )}
+
             <button
-
-              onClick={handleRegister}
-
+              onClick={isLoginMode ? handleLogin : handleSignup}
               className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-base sm:text-lg hover:from-emerald-600 hover:to-teal-600 transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
-
-              disabled={!inputNickname.trim()}
-
+              disabled={!inputNickname.trim() || !inputPassword.trim()}
             >
-
-              始める
-
+              {isLoginMode ? 'ログイン' : '新規登録'}
             </button>
+
+            <div className="text-center pt-2">
+              <button
+                onClick={() => {
+                  setIsLoginMode(!isLoginMode);
+                  setNicknameError('');
+                  setPasswordError('');
+                  setInputNickname('');
+                  setInputPassword('');
+                }}
+                className="text-emerald-600 hover:text-emerald-700 text-sm font-medium underline"
+              >
+                {isLoginMode ? '新規登録はこちら' : 'ログインはこちら'}
+              </button>
+            </div>
 
           </div>
 
@@ -650,7 +672,7 @@ const FutsalAttendance = () => {
                 <span className="text-xs sm:text-sm font-semibold text-white truncate max-w-[60px] sm:max-w-none">{nickname}</span>
               </div>
 
-              {/* 닉네임 변경 버튼 */}
+              {/* 로그아웃 버튼 */}
               <button 
                 onClick={async () => {
                   const userId = getOrCreateUserId();
@@ -695,15 +717,17 @@ const FutsalAttendance = () => {
                     }
                   }
                   
-                  localStorage.removeItem('futsalNickname');
+                  localStorage.removeItem('futsalUsername');
                   setIsRegistered(false);
                   setMyStatus('none');
                   setInputNickname('');
+                  setInputPassword('');
+                  setIsLoginMode(true);
                 }}
                 className="group flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 bg-white/90 hover:bg-white border border-gray-200 rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
               >
                 <Pencil size={12} className="sm:w-[13px] sm:h-[13px] md:w-[14px] md:h-[14px] text-gray-600 group-hover:text-emerald-600 transition-colors" />
-                <span className="text-[10px] sm:text-xs font-semibold text-gray-700 group-hover:text-emerald-600 transition-colors hidden sm:inline">変更</span>
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-700 group-hover:text-emerald-600 transition-colors hidden sm:inline">ログアウト</span>
               </button>
             </div>
 
