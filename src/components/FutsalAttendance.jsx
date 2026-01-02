@@ -511,7 +511,7 @@ const FutsalAttendance = () => {
 
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-3 sm:p-4">
 
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl border border-white/20 p-6 sm:p-8 md:p-10 max-w-md w-full transform transition-all hover:scale-[1.02]">
+        <div key={isLoginMode ? 'login' : 'signup'} className="bg-white/80 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl border border-white/20 p-6 sm:p-8 md:p-10 max-w-md w-full transform transition-all hover:scale-[1.02] animate-slide-fade-in">
 
           <div className="text-center mb-6 sm:mb-8 md:mb-10">
 
