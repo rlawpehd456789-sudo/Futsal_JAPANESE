@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ref, get } from 'firebase/database';
+import { ref, get, set } from 'firebase/database';
 import { database } from '../firebase';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import { ArrowLeft, TrendingUp, Calendar, Users, Trophy } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Calendar, Users, Trophy, RotateCcw, Trash2 } from 'lucide-react';
 import { Typewriter } from './ui/typewriter-text';
 
 const AttendanceStats = ({ onBack }) => {
@@ -132,6 +132,63 @@ const AttendanceStats = ({ onBack }) => {
       console.error('統計データ取得失敗:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 사용자별 참여 기록 리셋 함수
+  const resetUserRecords = async (targetNickname) => {
+    if (!targetNickname) {
+      alert('ユーザー名が指定されていません。');
+      return;
+    }
+
+    if (!confirm(`${targetNickname}さんの参加記録をすべてリセットしますか？\nこの操作は取り消せません。`)) {
+      return;
+    }
+
+    try {
+      const attendanceRef = ref(database, 'attendance');
+      const allAttendanceSnapshot = await get(attendanceRef);
+      
+      if (!allAttendanceSnapshot.exists()) {
+        alert('参加記録が見つかりませんでした。');
+        return;
+      }
+
+      const attendanceData = allAttendanceSnapshot.val();
+      const updates = {};
+      
+      // 모든 날짜에서 해당 닉네임 제거
+      Object.keys(attendanceData).forEach(dateKey => {
+        const dateData = attendanceData[dateKey];
+        if (dateData && dateData.participants && Array.isArray(dateData.participants)) {
+          const filteredParticipants = dateData.participants.filter(
+            p => p.nickname !== targetNickname
+          );
+          
+          if (filteredParticipants.length !== dateData.participants.length) {
+            updates[`attendance/${dateKey}/participants`] = filteredParticipants;
+          }
+        }
+      });
+      
+      // 여러 날짜 동시 업데이트
+      if (Object.keys(updates).length > 0) {
+        await Promise.all(
+          Object.entries(updates).map(([path, value]) => {
+            const pathRef = ref(database, path);
+            return set(pathRef, value);
+          })
+        );
+        alert(`${targetNickname}さんの参加記録をリセットしました。`);
+        // 통계 데이터 다시 가져오기
+        await fetchAttendanceStats();
+      } else {
+        alert(`${targetNickname}さんの参加記録が見つかりませんでした。`);
+      }
+    } catch (error) {
+      console.error('参加記録リセット失敗:', error);
+      alert('参加記録のリセット中にエラーが発生しました。');
     }
   };
 
@@ -306,6 +363,46 @@ const AttendanceStats = ({ onBack }) => {
                     ? Math.round((statsData.reduce((sum, user) => sum + user.joinCount, 0) / statsData.length) * 10) / 10
                     : 0}日
                 </div>
+              </div>
+            </div>
+
+            {/* User List with Reset Button */}
+            <div className="bg-white/80 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-xl border border-white/20 p-4 sm:p-6 md:p-8 mt-6 sm:mt-8">
+              <h2 className="text-base sm:text-lg md:text-xl font-extrabold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
+                <span className="w-1 h-4 sm:h-5 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full"></span>
+                ユーザーごとの参加記録管理
+              </h2>
+              <div className="space-y-2 sm:space-y-3">
+                {statsData.map((user, index) => (
+                  <div
+                    key={user.nickname}
+                    className="flex items-center justify-between p-3 sm:p-4 bg-gray-50/80 hover:bg-gray-100 border border-gray-200 rounded-xl sm:rounded-2xl transition-all duration-200"
+                  >
+                    <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                      <div className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl font-bold text-sm sm:text-base ${
+                        index === 0 ? 'bg-gradient-to-br from-yellow-400 to-amber-500 text-white' : 'bg-emerald-100 text-emerald-600'
+                      }`}>
+                        {index + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm sm:text-base text-gray-800 truncate">
+                          {user.nickname}
+                        </div>
+                        <div className="text-xs sm:text-sm text-gray-500">
+                          {user.joinCount}日参加
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => resetUserRecords(user.nickname)}
+                      className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg sm:rounded-xl text-red-600 hover:text-red-700 transition-all duration-200 transform hover:scale-105 active:scale-95"
+                      title={`${user.nickname}さんの参加記録をリセット`}
+                    >
+                      <Trash2 size={14} className="sm:w-[16px] sm:h-[16px]" />
+                      <span className="text-xs sm:text-sm font-semibold hidden sm:inline">リセット</span>
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
           </>
