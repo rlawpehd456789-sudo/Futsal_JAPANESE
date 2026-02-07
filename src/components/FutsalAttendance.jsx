@@ -509,22 +509,30 @@ const FutsalAttendance = () => {
 
     return (
 
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center p-3 sm:p-4">
+      <div className={`min-h-screen flex items-center justify-center p-3 sm:p-4 ${
+        isLoginMode 
+          ? 'bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50' 
+          : 'bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50'
+      }`}>
 
         <div key={isLoginMode ? 'login' : 'signup'} className="bg-white/80 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl border border-white/20 p-6 sm:p-8 md:p-10 max-w-md w-full transform transition-all hover:scale-[1.02] animate-slide-fade-in">
 
           <div className="text-center mb-6 sm:mb-8 md:mb-10">
 
-            <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full mb-4 sm:mb-5 md:mb-6 shadow-lg">
-              <span className="text-3xl sm:text-4xl md:text-5xl">⚽</span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mb-2 sm:mb-3">
+            <h1 className={`text-2xl sm:text-3xl md:text-4xl font-extrabold bg-clip-text text-transparent mb-2 sm:mb-3 ${
+              isLoginMode 
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600' 
+                : 'bg-gradient-to-r from-green-700 to-green-800'
+            }`}>
               <Typewriter
                 text={["Today's Lunch Soccer"]}
                 speed={100}
                 loop={true}
-                className="text-2xl sm:text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent"
+                className={`text-2xl sm:text-3xl md:text-4xl font-extrabold bg-clip-text text-transparent ${
+                  isLoginMode 
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600' 
+                    : 'bg-gradient-to-r from-green-700 to-green-800'
+                }`}
               />
             </h1>
 
@@ -533,8 +541,6 @@ const FutsalAttendance = () => {
             </p>
 
           </div>
-
-          
 
           <div className="space-y-3 sm:space-y-4">
 
@@ -555,7 +561,9 @@ const FutsalAttendance = () => {
                 className={`w-full px-4 py-3 sm:px-5 sm:py-4 border-2 rounded-xl sm:rounded-2xl text-sm sm:text-base font-medium focus:outline-none transition-all duration-200 ${
                   nicknameError 
                     ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
-                    : 'border-gray-200 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100'
+                    : isLoginMode
+                      ? 'border-gray-200 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100'
+                      : 'border-gray-200 focus:border-green-700 focus:ring-4 focus:ring-green-100'
                 }`}
                 maxLength={10}
               />
@@ -581,7 +589,9 @@ const FutsalAttendance = () => {
                 className={`w-full px-4 py-3 sm:px-5 sm:py-4 border-2 rounded-xl sm:rounded-2xl text-sm sm:text-base font-medium focus:outline-none transition-all duration-200 ${
                   passwordError 
                     ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
-                    : 'border-gray-200 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100'
+                    : isLoginMode
+                      ? 'border-gray-200 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100'
+                      : 'border-gray-200 focus:border-green-700 focus:ring-4 focus:ring-green-100'
                 }`}
               />
             </div>
@@ -605,7 +615,11 @@ const FutsalAttendance = () => {
                 id="saveUsername"
                 checked={saveUsername}
                 onChange={(e) => setSaveUsername(e.target.checked)}
-                className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer"
+                className={`w-4 h-4 border-gray-300 rounded focus:ring-2 cursor-pointer ${
+                  isLoginMode 
+                    ? 'text-emerald-600 focus:ring-emerald-500' 
+                    : 'text-green-700 focus:ring-green-700'
+                }`}
               />
               <label
                 htmlFor="saveUsername"
@@ -617,7 +631,11 @@ const FutsalAttendance = () => {
 
             <button
               onClick={isLoginMode ? handleLogin : handleSignup}
-              className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-base sm:text-lg hover:from-emerald-600 hover:to-teal-600 transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
+              className={`w-full text-white py-3 sm:py-4 rounded-xl sm:rounded-2xl font-bold text-base sm:text-lg transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] ${
+                isLoginMode
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600'
+                  : 'bg-gradient-to-r from-green-700 to-green-800 hover:from-green-800 hover:to-green-900'
+              }`}
               disabled={!inputNickname.trim() || !inputPassword.trim()}
             >
               {isLoginMode ? 'ログイン' : '新規登録'}
@@ -645,7 +663,11 @@ const FutsalAttendance = () => {
                   }
                   setInputPassword('');
                 }}
-                className="text-emerald-600 hover:text-emerald-700 text-sm font-medium underline"
+                className={`text-sm font-medium underline ${
+                  isLoginMode 
+                    ? 'text-emerald-600 hover:text-emerald-700' 
+                    : 'text-green-700 hover:text-green-800'
+                }`}
               >
                 {isLoginMode ? '新規登録はこちら' : 'ログインはこちら'}
               </button>
@@ -1158,4 +1180,3 @@ const FutsalAttendance = () => {
 };
 
 export default FutsalAttendance;
-
